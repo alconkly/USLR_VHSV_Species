@@ -1,0 +1,61 @@
+---
+title: "VHSV_Species_ZIG"
+author: "Anna Conklyn"
+date: "2023-12-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warnings = FALSE, message = FALSE)
+
+library(readxl)
+library(ggplot2)
+library(magrittr)
+library(dplyr)
+```
+
+## Import data
+```{r}
+getwd()
+All_Titers <- read_xlsx("Titers.xlsx", col_names = TRUE) %>% mutate(Titer = round(Titer))
+All_Titers$logTiter<-as.numeric(All_Titers$logTiter)
+```
+
+## Vizualize zero-inflation
+
+### All Titers
+```{r}
+ggplot(data=All_Titers, aes(Titer)) + geom_histogram() + facet_wrap(.~Species)
+with(All_Titers, mosaicplot(table( Species, Titer == 0), shade = TRUE))
+```
+
+### Log-transformed Titers
+```{r}
+ggplot(data=All_Titers, aes(logTiter)) + geom_histogram()  + facet_wrap(.~Species)
+ggplot(data=All_Titers, aes(Species, logTiter)) + geom_violin() + ggtitle("log viral loads - non-zero")
+```
+
+
+# Zero-inflated Gamma mixed-effects modeling 
+
+Species main effect, site and year random
+
+```{r}
+require(glmmTMB)
+
+Species_fit <- glmmTMB(Titer ~ Species  + (1 | Site*Year) + (1 | Year), 
+               ziformula = ~ Species + (1 | Site) + (1 | Year), 
+               family = ziGamma(link = "log"), 
+               data = All_Titers)
+summary(Species_fit)
+```
+
+## DHARMa
+
+Diagnostics using DHARMa
+
+```{r}
+require(DHARMa)
+Species_fit_residuals <- simulateResiduals(Species_fit)
+plot(Species_fit_residuals)
+```

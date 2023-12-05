@@ -1,0 +1,123 @@
+---
+title: "VHSV_Species_Comp"
+author: "Anna Conklyn"
+date: "2023-12-05"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(readxl)
+library(ggplot2)
+library(magrittr)
+library(dplyr)
+library(ggpubr)
+library(plyr)
+library(rstatix)
+library(ggprism)
+library(ggtext)
+library(gt)
+
+getwd()
+```
+
+
+## 1. Data setup
+
+```{r}
+All_VHSV<-read_xlsx("Peak_VHSV_2018-2022.xlsx", col_names = TRUE)
+
+All_VHSV<- filter(All_VHSV, Year %in%  c("2020", "2021"))
+
+Positve_Hosts<- filter(All_VHSV, Diagnosis == "Positive")
+
+Pooled_Host_Titers<- subset(Positve_Hosts, (!is.na(Positve_Hosts[,"Titer-P"])))
+Pooled_Host_Titers$Isolate<-"Pooled"
+Pooled_Host_Titers %<>% mutate (logTiter=log10(`Titer-P`))
+                        
+Brain_Host_Titers<- subset(Positve_Hosts, (!is.na(Positve_Hosts[,"Titer-B"])))
+Brain_Host_Titers$Isolate<- "Brain"
+Brain_Host_Titers %<>% mutate (logTiter=log10(`Titer-B`))
+
+All_Host_Titers<- rbind(Pooled_Host_Titers, Brain_Host_Titers)
+
+```
+
+### 1. Contingency table for infection prevalence between host species and pairwise Fisher's Exact tests for differences between host species
+
+```{r}
+
+(Species_table<- table(All_VHSV$Species, All_VHSV$Diagnosis))
+names(dimnames(Species_table))<-c(  "Species", "Diagnosis")
+Species_table<-as.data.frame.matrix(Species_table)
+
+(Species_test<-pairwise_fisher_test(Species_table, conf.int = TRUE, alternative = "two.sided", p.adjust.method = "bonferroni"))
+Species_test$p<- round(Species_test$p, digits = 2)
+Species_test$p.adj<- round(Species_test$p.adj, digits = 2)
+names(Species_test)[names(Species_test)=='p.adj.signif']<- 'p.adj.sig'
+
+(Species_prevalence_test_table<- gt(Species_test)%>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels())%>%
+  cols_width(everything() ~ px(100)))
+
+Species_prevalence_test_table %>% gtsave(filename="Species_prevalence_FisherTest.png", path="G:/Dissertation/Chapter 3- VHSV species/USLR_VHSV_Species/Figures")
+
+```
+
+
+### 3. Pairwise median titer- Kruskal-Wallis test with Dunn post-hoc comparisons with Bonferroni correction between host species
+```{r, echo=FALSE}
+(All_Host_Titers %>% kruskal.test(logTiter ~ Species, p.adjust.method = "bonferroni"))
+Host_Titers_test<- All_Host_Titers %>% dunn_test (logTiter~Species, p.adjust.method = "bonferroni")
+
+Host_Titers_test$p<- round(Host_Titers_test$p, digits = 2)
+Host_Titers_test$p.adj<- round(Host_Titers_test$p.adj, digits = 2)
+Host_Titers_test$statistic<- round(Host_Titers_test$statistic, digits = 2)
+names(Host_Titers_test)[names(Host_Titers_test)=='p.adj.signif']<- 'p.adj.sig'
+
+(Species_titer_test_table<- gt(Host_Titers_test) %>%
+  tab_style(
+    style = cell_text(weight = "bold", size = 12),
+locations = cells_row_groups(groups = everything())
+  ) %>%
+  tab_style(
+    style = cell_text(weight = "bold", size = 12),
+    locations = cells_column_labels())%>%
+  cols_width(everything() ~ px(65)))
+
+Species_titer_test_table %>% gtsave(filename="Species_titer_DunnTest.png", path="G:/Dissertation/Chapter 3- VHSV species/USLR_VHSV_Species/Figures")
+```
+
+
+
+### 4. Figure: prevalence barplots between host species
+```{r, echo=FALSE}
+Species_table$Total<-rowSums(Species_table)
+Species_table$Prevalence<- (Species_table$Positive/Species_table$Total)*100
+Species_table$Species<- row.names(Species_table)
+
+Host_prev<- ggplot(data=Species_table) + geom_col(aes(Species, Prevalence)) + ylim(0,100)+ theme_classic () + labs(x = NULL,  y = "Prevalence (%)")  + theme(axis.text = element_text(size = 14), axis.title = element_text(size = 18), title=element_text(size=22)) + scale_x_discrete(labels=c("Brown Bullhead" = "Brown Bullhead \n (n=232)", "Lepomis sp." = "Lepomis sp. \n (n=157)",  "Rock Bass" = "Rock Bass \n (n=311)", "Round Goby" =  "Round Goby \n (n=156)", "Yellow Perch" = "Yellow Perch \n (n=200)"))
+
+(Host_prev<- Host_prev +  stat_pvalue_manual(Species_test, xmin="group1", xmax = "group2", step.increase = 0.1, y.position = 60, label="p.adj.sig", hide.ns = TRUE, label.size = 8, bracket.size =  0.7))
+
+
+ggsave("Host_prevalence.jpeg", device="jpeg", plot=Host_prev, path="G:/Dissertation/Chapter 3- VHSV species/USLR_VHSV_Species/Figures", dpi="retina", width = 14, height = 9)
+
+Species_table$Prevalence<- round(Species_table$Prevalence, digits = 2)
+
+(Print_Host_table<- Species_table %>% gt(rowname_col = "Species") %>%
+  tab_stubhead(label = "Species") %>%  cols_move_to_start(columns = "Positive"))
+```
+
+
+### 4. Figure: Titer boxplots between host species
+
+```{r, echo=FALSE}
+Host_titer<-ggplot(data=All_Host_Titers) + geom_boxplot(aes(Species, logTiter, fill=Isolate)) + ylim(0,8)  + labs( y="log10(Titer) (N-gene \n copies per 50 ng RNA)")  + scale_fill_manual(values=c("grey", "white")) + theme_classic()+ theme(axis.text= element_text(size = 14), legend.text = element_text(size = 14), axis.title = element_text(size = 18), title=element_text(size=22), legend.position = "bottom", legend.title = element_text(size = 14))  
+
+(Host_titer<- Host_titer +  stat_pvalue_manual(Host_Titers_test, xmin="group1", xmax = "group2", step.increase = 0.1, y.position = 5.0, label="p.adj.sig", hide.ns = TRUE, label.size = 8, bracket.size =  0.7))
+
+ggsave("Host_titer.jpeg", device="jpeg", plot=Host_titer, path="G:/Dissertation/Chapter 3- VHSV species/USLR_VHSV_Species/Figures", dpi="retina", width = 14, height = 9)
+```

@@ -1,0 +1,52 @@
+---
+title: "Titer data setup for GLM"
+author: "Anna Conklyn"
+date: "2023-09-19"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r, include=FALSE}
+library(readxl)
+library(ggplot2)
+library(magrittr)
+library(dplyr)
+library(writexl)
+```
+
+
+# Data setup for ZIG: One titer per line, remove non-needed columns
+
+```{r}
+getwd()
+setwd("G:/Dissertation/Chapter 3- VHSV species/USLR_VHSV_Species")
+
+All_VHSV<-read_xlsx("Peak_VHSV_2018-2022.xlsx", col_names = TRUE) 
+Positve_all<- filter(All_VHSV, Diagnosis == "Positive")
+
+Pooled_Titers<- subset(Positve_all, (!is.na(Positve_all[,"Titer-P"])))
+Pooled_Titers$Isolate<-"Pooled"
+Pooled_Titers %<>% mutate (Titer=`Titer-P`) %<>% mutate (logTiter=log10(Titer))
+
+Brain_Titers<- subset(Positve_all, (!is.na(Positve_all[,"Titer-B"])))
+Brain_Titers$Isolate<- "Brain"
+Brain_Titers %<>% mutate (Titer=`Titer-B`) %<>% mutate (logTiter=log10(Titer))
+
+Negatives<- filter(All_VHSV, Diagnosis == "Negative" )
+Negatives$Isolate<-"None"
+Negatives %<>% mutate (Titer=0) %<>% mutate (logTiter=log10(Titer))
+
+All_Titers<- rbind(Pooled_Titers, Brain_Titers, Negatives)
+drop<- c("PCR ID","Extraction Date", "qPCR date", "QTY-B", "QTY-P", "Titer-B", "Titer-P")
+All_Titers<- All_Titers[ , ! names(All_Titers) %in% drop, drop=F]
+All_Titers$logTiter<- as.numeric(All_Titers$logTiter)
+
+All_Titers %<>% filter(Year==c("2020" , "2021"))
+
+write_xlsx(All_Titers,"G:/Dissertation/Chapter 3- VHSV species/USLR_VHSV_Species/Long_Titers.xlsx")
+
+```
+
