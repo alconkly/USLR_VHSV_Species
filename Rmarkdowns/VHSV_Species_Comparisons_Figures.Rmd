@@ -21,8 +21,14 @@ library(gt)
 getwd()
 ```
 
+# Chapter 3: VHSV PREVALENCE IN ROUND GOBIES VERSUS SYMPATRIC HOST SPECIES IN THE NEARSHORE FISH ASSEMBLAGE OF THE UPPER ST. LAWRENCE RIVER
 
-## 1. Data setup
+## Contents:
+  > 1. Contingency table for infection prevalence between host species & pairwise Fisher's exact tests for prevalence differences between host species
+  > 2. Pairwise Kruskal–Wallis test for titer differences between host species
+  > 3. Figures & Tables: summary table, prevalence barplots and titer boxplots between host species
+
+## Data setup
 
 ```{r}
 All_VHSV<-read_xlsx("Peak_VHSV_2018-2022.xlsx", col_names = TRUE)
@@ -67,7 +73,7 @@ Species_prevalence_test_table %>% gtsave(filename="Species_prevalence_FisherTest
 ```
 
 
-### 3. Pairwise median titer- Kruskal-Wallis test with Dunn post-hoc comparisons with Bonferroni correction between host species
+### 2. Pairwise median titer- Kruskal-Wallis test with Dunn post-hoc comparisons with Bonferroni correction between host species
 ```{r, echo=FALSE}
 (All_Host_Titers %>% kruskal.test(logTiter ~ Species, p.adjust.method = "bonferroni"))
 Host_Titers_test<- All_Host_Titers %>% dunn_test (logTiter~Species, p.adjust.method = "bonferroni")
@@ -90,13 +96,26 @@ locations = cells_row_groups(groups = everything())
 Species_titer_test_table %>% gtsave(filename="Species_titer_DunnTest.png", path="G:/Dissertation/Chapter 3- VHSV species/USLR_VHSV_Species/Figures")
 ```
 
+## 3. Figures & Tables
 
+### Summary of prevalence rates
 
-### 4. Figure: prevalence barplots between host species
 ```{r, echo=FALSE}
 Species_table$Total<-rowSums(Species_table)
 Species_table$Prevalence<- (Species_table$Positive/Species_table$Total)*100
 Species_table$Species<- row.names(Species_table)
+
+Species_table$Prevalence<- round(Species_table$Prevalence, digits = 2)
+
+(Print_Host_table<- Species_table %>% gt(rowname_col = "Species") %>%
+  tab_stubhead(label = "Species") %>%  cols_move_to_start(columns = "Positive"))
+
+Print_Host_table %>% gtsave(filename="Species_prevalence_summary.png", path="G:/Dissertation/Chapter 3- VHSV species/USLR_VHSV_Species/Figures")
+```
+
+### Prevalence barplots between host species
+
+```{r}
 
 Host_prev<- ggplot(data=Species_table) + geom_col(aes(Species, Prevalence)) + ylim(0,100)+ theme_classic () + labs(x = NULL,  y = "Prevalence (%)")  + theme(axis.text = element_text(size = 14), axis.title = element_text(size = 18), title=element_text(size=22)) + scale_x_discrete(labels=c("Brown Bullhead" = "Brown Bullhead \n (n=232)", "Lepomis sp." = "Lepomis sp. \n (n=157)",  "Rock Bass" = "Rock Bass \n (n=311)", "Round Goby" =  "Round Goby \n (n=156)", "Yellow Perch" = "Yellow Perch \n (n=200)"))
 
@@ -105,14 +124,10 @@ Host_prev<- ggplot(data=Species_table) + geom_col(aes(Species, Prevalence)) + yl
 
 ggsave("Host_prevalence.jpeg", device="jpeg", plot=Host_prev, path="G:/Dissertation/Chapter 3- VHSV species/USLR_VHSV_Species/Figures", dpi="retina", width = 14, height = 9)
 
-Species_table$Prevalence<- round(Species_table$Prevalence, digits = 2)
-
-(Print_Host_table<- Species_table %>% gt(rowname_col = "Species") %>%
-  tab_stubhead(label = "Species") %>%  cols_move_to_start(columns = "Positive"))
 ```
 
 
-### 4. Figure: Titer boxplots between host species
+### Titer boxplots between host species
 
 ```{r, echo=FALSE}
 Host_titer<-ggplot(data=All_Host_Titers) + geom_boxplot(aes(Species, logTiter, fill=Isolate)) + ylim(0,8)  + labs( y="log10(Titer) (N-gene \n copies per 50 ng RNA)")  + scale_fill_manual(values=c("grey", "white")) + theme_classic()+ theme(axis.text= element_text(size = 14), legend.text = element_text(size = 14), axis.title = element_text(size = 18), title=element_text(size=22), legend.position = "bottom", legend.title = element_text(size = 14))  
@@ -121,3 +136,14 @@ Host_titer<-ggplot(data=All_Host_Titers) + geom_boxplot(aes(Species, logTiter, f
 
 ggsave("Host_titer.jpeg", device="jpeg", plot=Host_titer, path="G:/Dissertation/Chapter 3- VHSV species/USLR_VHSV_Species/Figures", dpi="retina", width = 14, height = 9)
 ```
+
+
+### Join plots 
+
+```{r}
+(VHSV_Species<- ggarrange(Host_prev, Host_titer, nrow = 2))
+ ggsave("JOINED_VHSV_Species.jpeg", device="jpeg", plot=VHSV_Species, path="G:/Dissertation/Chapter 3- VHSV species/USLR_VHSV_Species/Figures", dpi="retina", width = 10, height = 14)
+ 
+```
+
+

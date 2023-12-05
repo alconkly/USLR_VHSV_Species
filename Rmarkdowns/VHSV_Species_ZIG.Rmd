@@ -21,7 +21,13 @@ All_Titers <- read_xlsx("Titers.xlsx", col_names = TRUE) %>% mutate(Titer = roun
 All_Titers$logTiter<-as.numeric(All_Titers$logTiter)
 ```
 
-## Vizualize zero-inflation
+# Chapter 3: VHSV PREVALENCE IN ROUND GOBIES VERSUS SYMPATRIC NATIVE HOST SPECIES IN THE NEARSHORE FISH ASSEMBLAGE OF THE UPPER ST. LAWRENCE RIVER
+
+## Contents:
+  > 1. Visualize zero-inflation
+  > 2. Zero-inflated Gamma mixed-effects modeling 
+
+## 1. Visualize zero-inflation
 
 ### All Titers
 ```{r}
@@ -36,9 +42,9 @@ ggplot(data=All_Titers, aes(Species, logTiter)) + geom_violin() + ggtitle("log v
 ```
 
 
-# Zero-inflated Gamma mixed-effects modeling 
+## 2. Zero-inflated Gamma mixed-effects modeling 
 
-Species main effect, site and year random
+### Species main effect, site and year random
 
 ```{r}
 require(glmmTMB)
@@ -50,9 +56,7 @@ Species_fit <- glmmTMB(Titer ~ Species  + (1 | Site*Year) + (1 | Year),
 summary(Species_fit)
 ```
 
-## DHARMa
-
-Diagnostics using DHARMa
+### Diagnostics using DHARMa
 
 ```{r}
 require(DHARMa)
