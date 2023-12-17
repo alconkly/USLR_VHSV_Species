@@ -12,13 +12,48 @@ library(readxl)
 library(ggplot2)
 library(magrittr)
 library(dplyr)
+library(DHARMa)
+library(glmmTMB)
+library(gt)
+library(gtable)
+library(gtsummary)
+library(tidyr)
 ```
 
-## Import data
+
+## Data setup
+
 ```{r}
-getwd()
-All_Titers <- read_xlsx("Titers.xlsx", col_names = TRUE) %>% mutate(Titer = round(Titer))
-All_Titers$logTiter<-as.numeric(All_Titers$logTiter)
+All_VHSV<-read_xlsx("G:/Dissertation/Chapter 3- VHSV species/USLR_VHSV_Species/Peak_VHSV_2018-2022.xlsx", col_names = TRUE)
+
+All_VHSV<- filter(All_VHSV, Year %in%  c("2020", "2021"))
+
+Positve_Hosts<- filter(All_VHSV, Diagnosis == "Positive")
+
+Pooled_Host_Titers<- subset(Positve_Hosts, (!is.na(Positve_Hosts[,"Titer-P"])))
+Pooled_Host_Titers$Isolate<-"Pooled"
+Pooled_Host_Titers %<>% mutate (logTiter=log10(`Titer-P`), Titer=`Titer-P`)
+                        
+Brain_Host_Titers<- subset(Positve_Hosts, (!is.na(Positve_Hosts[,"Titer-B"])))
+Brain_Host_Titers$Isolate<- "Brain"
+Brain_Host_Titers %<>% mutate (logTiter=log10(`Titer-B`), Titer=`Titer-B`)
+
+Negatives<- filter(All_VHSV, Diagnosis == "Negative" )
+Negatives$Isolate<-"None"
+Negatives %<>% mutate (Titer=0) %<>% mutate (logTiter=log10(Titer))
+
+All_Titers<- rbind(Pooled_Host_Titers, Brain_Host_Titers, Negatives)
+drop<- c("PCR ID","Extraction Date", "qPCR date", "QTY-B", "QTY-P", "Titer-B", "Titer-P")
+All_Titers<- All_Titers[ , ! names(All_Titers) %in% drop, drop=F]
+
+
+
+Sites <- read_xlsx("G:/Dissertation/Chapter 3- VHSV species/USLR_VHSV_Species/Sites.xlsx", col_names = TRUE)
+
+All_Titers<- All_Titers %>% inner_join(Sites, by=c('Site'='Bay', 'Year'='Year'))
+All_Titers$RGCPUE %<>% as.numeric()
+All_Titers$Temperature %<>% as.numeric()
+
 ```
 
 # Chapter 3: VHSV PREVALENCE IN ROUND GOBIES VERSUS SYMPATRIC NATIVE HOST SPECIES IN THE NEARSHORE FISH ASSEMBLAGE OF THE UPPER ST. LAWRENCE RIVER
@@ -43,23 +78,600 @@ ggplot(data=All_Titers, aes(Species, logTiter)) + geom_violin() + ggtitle("log v
 
 
 ## 2. Zero-inflated Gamma mixed-effects modeling 
+## Fixed effects
 
-### Species main effect, site and year random
+### Null model:
+  > Zero-inflation model
+      > Fixed Effects: null
+      > Random Effects: null
+  > Gamma model
+      > Fixed Effects: null
+      > Random Effects: null
 
 ```{r}
-require(glmmTMB)
 
-Species_fit <- glmmTMB(Titer ~ Species  + (1 | Site*Year) + (1 | Year), 
+null <- glmmTMB(Titer ~ 1, 
+               ziformula = ~ ., 
+               family = ziGamma(link = "log"), 
+               data = All_Titers)
+summary(null)
+plot(simulateResiduals(null))
+
+null_Comp<- AIC(null)
+null_Comp$AIC<- AIC(null)
+null_Comp$ZInf<- "."
+null_Comp$Gamma<- "1"
+null_Comp$ZIRandom<- "null"
+null_Comp$GRandom<- "null"
+null_Comp %<>% as.data.frame()
+null_Comp %<>% select(-1)
+```
+
+
+### Full model:
+ > Zero-inflation model
+      > Fixed Effects: Species, RGCPUE, Temp
+      > Random Effects: null
+  > Gamma model
+      > Fixed Effects: Species, RGCPUE, Temp
+      > Random Effects: null
+
+```{r}
+
+ZISRT_GSRT <- glmmTMB(Titer ~ Species + RGCPUE + Temperature, 
+               ziformula = ~ Species + RGCPUE + Temperature , 
+               family = ziGamma(link = "log"), 
+               data = All_Titers)
+
+summary(ZISRT_GSRT)
+plot(simulateResiduals(ZISRT_GSRT))
+
+ZISRT_GSRT_Comp<- AIC(ZISRT_GSRT)
+ZISRT_GSRT_Comp$AIC<- AIC(ZISRT_GSRT)
+ZISRT_GSRT_Comp$ZInf<- "ZISRT"
+ZISRT_GSRT_Comp$Gamma<- "GSRT"
+ZISRT_GSRT_Comp$ZIRandom<- "null"
+ZISRT_GSRT_Comp$GRandom<- "null"
+ZISRT_GSRT_Comp %<>% as.data.frame()
+ZISRT_GSRT_Comp %<>% select(-1)
+```
+
+
+###  ZISRT - GSR
+ > Zero-inflation model
+      > Fixed Effects: Species, RGCPUE, Temp
+      > Random Effects: null
+  > Gamma model
+      > Fixed Effects: Species, RGCPUE
+      > Random Effects: null
+
+```{r}
+
+ZISRT_GSR <- glmmTMB(Titer ~ Species + RGCPUE, 
+               ziformula = ~ Species + RGCPUE + Temperature, 
+               family = ziGamma(link = "log"), 
+               data = All_Titers)
+
+summary(ZISRT_GSR)
+plot(simulateResiduals(ZISRT_GSR))
+
+ZISRT_GSR_Comp<- AIC(ZISRT_GSR)
+ZISRT_GSR_Comp$AIC<- AIC(ZISRT_GSR)
+ZISRT_GSR_Comp$ZInf<- "ZISRT"
+ZISRT_GSR_Comp$Gamma<- "GSR"
+ZISRT_GSR_Comp$ZIRandom<- "null"
+ZISRT_GSR_Comp$GRandom<- "null"
+ZISRT_GSR_Comp %<>% as.data.frame()
+ZISRT_GSR_Comp %<>% select(-1)
+```
+
+###  ZISR - GSRT
+ > Zero-inflation model
+      > Fixed Effects: Species, RGCPUE
+      > Random Effects: null
+  > Gamma model
+      > Fixed Effects: Species, RGCPUE, Temp
+      > Random Effects: null
+
+```{r}
+
+ZISR_GSRT <- glmmTMB(Titer ~ Species + RGCPUE + Temperature, 
+               ziformula = ~ Species + RGCPUE , 
+               family = ziGamma(link = "log"), 
+               data = All_Titers)
+
+summary(ZISR_GSRT)
+plot(simulateResiduals(ZISR_GSRT))
+
+ZISR_GSRT_Comp<- AIC(ZISR_GSRT)
+ZISR_GSRT_Comp$AIC<- AIC(ZISR_GSRT)
+ZISR_GSRT_Comp$ZInf<- "ZISR"
+ZISR_GSRT_Comp$Gamma<- "GSRT"
+ZISR_GSRT_Comp$ZIRandom<- "null"
+ZISR_GSRT_Comp$GRandom<- "null"
+ZISR_GSRT_Comp %<>% as.data.frame()
+ZISR_GSRT_Comp %<>% select(-1)
+```
+
+### ZISR - GSR
+ > Zero-inflation model
+      > Fixed Effects: Species, RGCPUE
+      > Random Effects: null
+  > Gamma model
+      > Fixed Effects: Species, RGCPUE
+      > Random Effects: null
+
+```{r}
+
+ZISR_GSR <- glmmTMB(Titer ~ Species + RGCPUE, 
+               ziformula = ~ Species + RGCPUE , 
+               family = ziGamma(link = "log"), 
+               data = All_Titers)
+
+summary(ZISR_GSR)
+plot(simulateResiduals(ZISR_GSR))
+
+ZISR_GSR_Comp<- AIC(ZISR_GSR)
+ZISR_GSR_Comp$AIC<- AIC(ZISR_GSR)
+ZISR_GSR_Comp$ZInf<- "ZISR"
+ZISR_GSR_Comp$Gamma<- "GSR"
+ZISR_GSR_Comp$ZIRandom<- "null"
+ZISR_GSR_Comp$GRandom<- "null"
+ZISR_GSR_Comp %<>% as.data.frame()
+ZISR_GSR_Comp %<>% select(-1)
+```
+
+
+### ZIS - GSR
+ > Zero-inflation model
+      > Fixed Effects: Species
+      > Random Effects: null
+  > Gamma model
+      > Fixed Effects: Species, RGCPUE
+      > Random Effects: null
+
+```{r}
+
+ZIS_GSR <- glmmTMB(Titer ~ Species+ RGCPUE, 
+               ziformula = ~ Species  , 
+               family = ziGamma(link = "log"), 
+               data = All_Titers)
+
+summary(ZIS_GSR)
+plot(simulateResiduals(ZIS_GSR))
+
+ZIS_GSR_Comp<- AIC(ZIS_GSR)
+ZIS_GSR_Comp$AIC<- AIC(ZIS_GSR)
+ZIS_GSR_Comp$ZInf<- "ZIS"
+ZIS_GSR_Comp$Gamma<- "GSR"
+ZIS_GSR_Comp$ZIRandom<- "null"
+ZIS_GSR_Comp$GRandom<- "null"
+ZIS_GSR_Comp %<>% as.data.frame()
+ZIS_GSR_Comp %<>% select(-1)
+```
+
+### ZISR - GS
+ > Zero-inflation model
+      > Fixed Effects: Species, RGCPUE
+      > Random Effects: null
+  > Gamma model
+      > Fixed Effects: Species
+      > Random Effects: null
+
+```{r}
+
+ZISR_GS <- glmmTMB(Titer ~ Species, 
+               ziformula = ~ Species + RGCPUE , 
+               family = ziGamma(link = "log"), 
+               data = All_Titers)
+
+summary(ZISR_GS)
+plot(simulateResiduals(ZISR_GS))
+
+ZISR_GS_Comp<- AIC(ZISR_GS)
+ZISR_GS_Comp$AIC<- AIC(ZISR_GS)
+ZISR_GS_Comp$ZInf<- "ZISR"
+ZISR_GS_Comp$Gamma<- "GS"
+ZISR_GS_Comp$ZIRandom<- "null"
+ZISR_GS_Comp$GRandom<- "null"
+ZISR_GS_Comp %<>% as.data.frame()
+ZISR_GS_Comp %<>% select(-1)
+```
+
+
+### ZIS-GS
+ > Zero-inflation model
+      > Fixed Effects: Species
+      > Random Effects: null
+  > Gamma model
+      > Fixed Effects: Species
+      > Random Effects: null
+ 
+```{r}
+
+ZIS_GS <- glmmTMB(Titer ~ Species, 
+               ziformula = ~ Species , 
+               family = ziGamma(link = "log"), 
+               data = All_Titers)
+summary(ZIS_GS)
+
+plot(simulateResiduals(ZIS_GS))
+
+ZIS_GS_Comp<- AIC(ZIS_GS)
+ZIS_GS_Comp$AIC<- AIC(ZIS_GS)
+ZIS_GS_Comp$ZInf<- "ZIS"
+ZIS_GS_Comp$Gamma<- "GS"
+ZIS_GS_Comp$ZIRandom<- "null"
+ZIS_GS_Comp$GRandom<- "null"
+ZIS_GS_Comp %<>% as.data.frame() 
+ZIS_GS_Comp %<>% select(-1)
+```
+
+### ZIS-null
+ > Zero-inflation model
+      > Fixed Effects: Species
+      > Random Effects: null
+  > Gamma model
+      > Fixed Effects: null
+      > Random Effects: null
+ 
+```{r}
+
+ZIS_null <- glmmTMB(Titer ~ 1, 
+               ziformula = ~ Species , 
+               family = ziGamma(link = "log"), 
+               data = All_Titers)
+summary(ZIS_null)
+
+plot(simulateResiduals(ZIS_null))
+
+ZIS_null_Comp<- AIC(ZIS_null)
+ZIS_null_Comp$AIC<- AIC(ZIS_null)
+ZIS_null_Comp$ZInf<- "ZIS"
+ZIS_null_Comp$Gamma<- "null"
+ZIS_null_Comp$ZIRandom<- "null"
+ZIS_null_Comp$GRandom<- "null"
+ZIS_null_Comp %<>% as.data.frame() 
+ZIS_null_Comp %<>% select(-1)
+```
+
+
+
+### ZIS-null
+ > Zero-inflation model
+      > Fixed Effects: null
+      > Random Effects: null
+  > Gamma model
+      > Fixed Effects: Species
+      > Random Effects: null
+ 
+```{r}
+
+null_GS <- glmmTMB(Titer ~ Species, 
+               ziformula = ~ ., 
+               family = ziGamma(link = "log"), 
+               data = All_Titers)
+summary(null_GS)
+
+plot(simulateResiduals(null_GS))
+
+null_GS_Comp<- AIC(null_GS)
+null_GS_Comp$AIC<- AIC(null_GS)
+null_GS_Comp$ZInf<- "null"
+null_GS_Comp$Gamma<- "GS"
+null_GS_Comp$ZIRandom<- "null"
+null_GS_Comp$GRandom<- "null"
+null_GS_Comp %<>% as.data.frame() 
+null_GS_Comp %<>% select(-1)
+```
+
+
+
+```{r}
+Fixed_comparisons<- rbind(null_Comp , ZISRT_GSRT_Comp, ZISRT_GSR_Comp, ZISR_GSRT_Comp, ZISR_GSR_Comp, ZIS_GSR_Comp, ZISR_GS_Comp, ZIS_GS_Comp, ZIS_null_Comp, null_GS_Comp)
+
+gt(Fixed_comparisons, rowname_col = "AIC") %>% 
+  tab_stubhead(label = "AIC")  %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+locations = cells_row_groups(groups = everything())
+  ) %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels())%>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_stubhead()) %>%   gtsave(filename="Species_ZIG_Fixed.png", path="G:/Dissertation/Chapter 3- VHSV species/USLR_VHSV_Species/Figures")
+
+
+summary(ZISR_GSR)
+
+
+```
+
+
+## Evaluate random effects
+
+### ZISR-GSR-SY-SY
+ > Zero-inflation model
+      > Fixed Effects: Species, RGCPUE
+      > Random Effects: Site, Year
+  > Gamma model
+      > Fixed Effects: Species, RGCPUE
+      > Random Effects: Site, Year
+
+```{r}
+
+ZISR_GSR_SY_SY <- glmmTMB(Titer ~ Species + RGCPUE + (1 | Site) + (1 | Year), 
+               ziformula = ~ Species + RGCPUE + (1 | Site) + (1 | Year), 
+               family = ziGamma(link = "log"), 
+               data = All_Titers)
+
+summary(ZISR_GSR_SY_SY)
+plot( simulateResiduals(ZISR_GSR_SY_SY))
+
+ZISR_GSR_SY_SY_Comp<- AIC(ZISR_GSR_SY_SY)
+ZISR_GSR_SY_SY_Comp$AIC<- AIC(ZISR_GSR_SY_SY)
+ZISR_GSR_SY_SY_Comp$ZInf<- "ZISR"
+ZISR_GSR_SY_SY_Comp$Gamma<- "GSR"
+ZISR_GSR_SY_SY_Comp$ZIRandom<- "Site, Year"
+ZISR_GSR_SY_SY_Comp$GRandom<- "Site, Year"
+ZISR_GSR_SY_SY_Comp %<>% as.data.frame()
+ZISR_GSR_SY_SY_Comp %<>% select(-1)
+```
+
+
+### ZIS-GSR-SY-SY
+ > Zero-inflation model
+      > Fixed Effects: Species
+      > Random Effects: Site, Year
+  > Gamma model
+      > Fixed Effects: Species, RGCPUE
+      > Random Effects: Site, Year
+
+```{r}
+
+ZIS_GSR_SY_SY <- glmmTMB(Titer ~ Species + RGCPUE + (1 | Site) + (1 | Year), 
                ziformula = ~ Species + (1 | Site) + (1 | Year), 
                family = ziGamma(link = "log"), 
                data = All_Titers)
-summary(Species_fit)
+
+summary(ZIS_GSR_SY_SY)
+plot( simulateResiduals(ZIS_GSR_SY_SY))
+
+ZIS_GSR_SY_SY_Comp<- AIC(ZIS_GSR_SY_SY)
+ZIS_GSR_SY_SY_Comp$AIC<- AIC(ZIS_GSR_SY_SY)
+ZIS_GSR_SY_SY_Comp$ZInf<- "ZIS"
+ZIS_GSR_SY_SY_Comp$Gamma<- "GSR"
+ZIS_GSR_SY_SY_Comp$ZIRandom<- "Site, Year"
+ZIS_GSR_SY_SY_Comp$GRandom<- "Site, Year"
+ZIS_GSR_SY_SY_Comp %<>% as.data.frame()
+ZIS_GSR_SY_SY_Comp %<>% select(-1)
 ```
 
-### Diagnostics using DHARMa
+### ZIS-GSR-SY-S
+ > Zero-inflation model
+      > Fixed Effects: Species
+      > Random Effects: Site, Year
+  > Gamma model
+      > Fixed Effects: Species, RGCPUE
+      > Random Effects: Site
 
 ```{r}
-require(DHARMa)
-Species_fit_residuals <- simulateResiduals(Species_fit)
-plot(Species_fit_residuals)
+
+ZIS_GSR_SY_S <- glmmTMB(Titer ~ Species + RGCPUE + (1 | Site), 
+               ziformula = ~ Species + (1 | Site) + (1 | Year), 
+               family = ziGamma(link = "log"), 
+               data = All_Titers)
+
+summary(ZIS_GSR_SY_S)
+plot( simulateResiduals(ZIS_GSR_SY_S))
+
+ZIS_GSR_SY_S_Comp<- AIC(ZIS_GSR_SY_S)
+ZIS_GSR_SY_S_Comp$AIC<- AIC(ZIS_GSR_SY_S)
+ZIS_GSR_SY_S_Comp$ZInf<- "ZIS"
+ZIS_GSR_SY_S_Comp$Gamma<- "GSR"
+ZIS_GSR_SY_S_Comp$ZIRandom<- "Site, Year"
+ZIS_GSR_SY_S_Comp$GRandom<- "Site"
+ZIS_GSR_SY_S_Comp %<>% as.data.frame()
+ZIS_GSR_SY_S_Comp %<>% select(-1)
 ```
+
+### ZIS-GSR-S-SY
+ > Zero-inflation model
+      > Fixed Effects: Species
+      > Random Effects: Site
+  > Gamma model
+      > Fixed Effects: Species, RGCPUE
+      > Random Effects: Site, Year
+
+```{r}
+
+ZIS_GSR_S_SY <- glmmTMB(Titer ~ Species + RGCPUE + (1 | Site) + (1 | Year), 
+               ziformula = ~ Species + (1 | Site) , 
+               family = ziGamma(link = "log"), 
+               data = All_Titers)
+
+summary(ZIS_GSR_S_SY)
+plot( simulateResiduals(ZIS_GSR_S_SY))
+
+ZIS_GSR_S_SY_Comp<- AIC(ZIS_GSR_S_SY)
+ZIS_GSR_S_SY_Comp$AIC<- AIC(ZIS_GSR_S_SY)
+ZIS_GSR_S_SY_Comp$ZInf<- "ZIS"
+ZIS_GSR_S_SY_Comp$Gamma<- "GSR"
+ZIS_GSR_S_SY_Comp$ZIRandom<- "Site"
+ZIS_GSR_S_SY_Comp$GRandom<- "Site, Year"
+ZIS_GSR_S_SY_Comp %<>% as.data.frame()
+ZIS_GSR_S_SY_Comp %<>% select(-1)
+
+```
+
+
+### ZIS-GSR-S-S
+ > Zero-inflation model
+      > Fixed Effects: Species
+      > Random Effects: Site
+  > Gamma model
+      > Fixed Effects: Species, RGCPUE
+      > Random Effects: Site
+
+```{r}
+
+ZIS_GSR_S_S <- glmmTMB(Titer ~ Species + RGCPUE + (1 | Site) , 
+               ziformula = ~ Species + (1 | Site) , 
+               family = ziGamma(link = "log"), 
+               data = All_Titers)
+
+summary(ZIS_GSR_S_S)
+plot( simulateResiduals(ZIS_GSR_S_S))
+
+ZIS_GSR_S_S_Comp<- AIC(ZIS_GSR_S_S)
+ZIS_GSR_S_S_Comp$AIC<- AIC(ZIS_GSR_S_S)
+ZIS_GSR_S_S_Comp$ZInf<- "ZIS"
+ZIS_GSR_S_S_Comp$Gamma<- "GSR"
+ZIS_GSR_S_S_Comp$ZIRandom<- "Site"
+ZIS_GSR_S_S_Comp$GRandom<- "Site"
+ZIS_GSR_S_S_Comp %<>% as.data.frame()
+ZIS_GSR_S_S_Comp %<>% select(-1)
+
+```
+
+### ZIS-GSR-n-S
+ > Zero-inflation model
+      > Fixed Effects: Species
+      > Random Effects: null
+  > Gamma model
+      > Fixed Effects: Species, RGCPUE
+      > Random Effects: Site
+
+```{r}
+
+ZIS_GSR_n_S <- glmmTMB(Titer ~ Species + RGCPUE + (1 | Site) , 
+               ziformula = ~ Species , 
+               family = ziGamma(link = "log"), 
+               data = All_Titers)
+
+summary(ZIS_GSR_n_S)
+plot( simulateResiduals(ZIS_GSR_n_S))
+
+ZIS_GSR_n_S_Comp<- AIC(ZIS_GSR_n_S)
+ZIS_GSR_n_S_Comp$AIC<- AIC(ZIS_GSR_n_S)
+ZIS_GSR_n_S_Comp$ZInf<- "ZIS"
+ZIS_GSR_n_S_Comp$Gamma<- "GSR"
+ZIS_GSR_n_S_Comp$ZIRandom<- "null"
+ZIS_GSR_n_S_Comp$GRandom<- "Site"
+ZIS_GSR_n_S_Comp %<>% as.data.frame()
+ZIS_GSR_n_S_Comp %<>% select(-1)
+
+```
+
+### ZIS-GSR-S-n
+ > Zero-inflation model
+      > Fixed Effects: Species
+      > Random Effects: Site
+  > Gamma model
+      > Fixed Effects: Species, RGCPUE
+      > Random Effects: null
+
+```{r}
+
+ZIS_GSR_S_n <- glmmTMB(Titer ~ Species + RGCPUE  , 
+               ziformula = ~ Species + (1 | Site) , 
+               family = ziGamma(link = "log"), 
+               data = All_Titers)
+
+summary(ZIS_GSR_S_n)
+plot( simulateResiduals(ZIS_GSR_S_n))
+
+ZIS_GSR_S_n_Comp<- AIC(ZIS_GSR_S_n)
+ZIS_GSR_S_n_Comp$AIC<- AIC(ZIS_GSR_S_n)
+ZIS_GSR_S_n_Comp$ZInf<- "ZIS"
+ZIS_GSR_S_n_Comp$Gamma<- "GSR"
+ZIS_GSR_S_n_Comp$ZIRandom<- "Site"
+ZIS_GSR_S_n_Comp$GRandom<- "null"
+ZIS_GSR_S_n_Comp %<>% as.data.frame()
+ZIS_GSR_S_n_Comp %<>% select(-1)
+
+```
+
+
+
+### ZIS-GSR-S*Y-S
+ > Zero-inflation model
+      > Fixed Effects: Species
+      > Random Effects: Site, Year
+  > Gamma model
+      > Fixed Effects: Species, RGCPUE
+      > Random Effects: Site
+
+```{r}
+
+ZIS_GSR_S.Y_S <- glmmTMB(Titer ~ Species + RGCPUE + (1 | Site), 
+               ziformula = ~ Species + (1 | Site* Year), 
+               family = ziGamma(link = "log"), 
+               data = All_Titers)
+
+summary(ZIS_GSR_S.Y_S)
+plot( simulateResiduals(ZIS_GSR_S.Y_S))
+
+ZIS_GSR_S.Y_S_Comp<- AIC(ZIS_GSR_S.Y_S)
+ZIS_GSR_S.Y_S_Comp$AIC<- AIC(ZIS_GSR_S.Y_S)
+ZIS_GSR_S.Y_S_Comp$ZInf<- "ZIS"
+ZIS_GSR_S.Y_S_Comp$Gamma<- "GSR"
+ZIS_GSR_S.Y_S_Comp$ZIRandom<- "Site*Year"
+ZIS_GSR_S.Y_S_Comp$GRandom<- "Site"
+ZIS_GSR_S.Y_S_Comp %<>% as.data.frame()
+ZIS_GSR_S.Y_S_Comp %<>% select(-1)
+```
+
+
+
+
+
+```{r}
+library(sjPlot)
+library(broom)
+require("dotwhisker")
+require("broom.mixed")
+require("flextable")
+
+random<- rbind(ZISR_GSR_SY_SY_Comp, ZIS_GSR_SY_SY_Comp, ZIS_GSR_SY_S_Comp, ZIS_GSR_S.Y_S_Comp, ZIS_GSR_S_SY_Comp, ZIS_GSR_S_S_Comp, ZIS_GSR_n_S_Comp, ZIS_GSR_S_n_Comp, ZIS_GSR_Comp)
+gt(random, rowname_col = "AIC") %>% 
+  tab_stubhead(label = "AIC")  %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+locations = cells_row_groups(groups = everything())
+  ) %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels())%>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_stubhead()) %>% gtsave(filename="Species_ZIG_Random.png", path="G:/Dissertation/Chapter 3- VHSV species/USLR_VHSV_Species/Figures")
+
+
+print(summary(ZIS_GSR_SY_S))
+simulationOutput<- simulateResiduals(ZIS_GSR_SY_S)
+plot(simulationOutput)
+testZeroInflation(simulationOutput)
+
+ZIS_GSR_SY_S_df<- tidy(ZIS_GSR_SY_S, conf.int = TRUE)
+ZIS_GSR_SY_S_df <- transform(ZIS_GSR_SY_S_df,term=sprintf("%s.%s", component, term))
+ZIS_GSR_SY_S_df$model<- ZIS_GSR_SY_S_df$component
+
+ZIS_GSR_SY_S_df %<>% 
+  filter(!grepl('(Intercept)', term))
+
+ZIS_GSR_SY_S_df
+
+dwplot(ZIS_GSR_SY_S_df) + theme_bw(base_size = 14) + xlab("Coefficient Estimate") + ylab("") +  scale_colour_grey() + theme(legend.position = "none")
+
+
+```
+
+
+
+
+
+
+
