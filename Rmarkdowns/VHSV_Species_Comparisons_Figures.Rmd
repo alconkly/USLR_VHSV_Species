@@ -31,7 +31,7 @@ getwd()
 ## Data setup
 
 ```{r}
-All_VHSV<-read_xlsx("Peak_VHSV_2018-2022.xlsx", col_names = TRUE)
+All_VHSV<-read_xlsx("~/GitHub/USLR_VHSV_Species/Peak_VHSV_2018-2022.xlsx", col_names = TRUE)
 
 All_VHSV<- filter(All_VHSV, Year %in%  c("2020", "2021"))
 
@@ -49,13 +49,229 @@ All_Host_Titers<- rbind(Pooled_Host_Titers, Brain_Host_Titers)
 
 ```
 
-### 1. Contingency table for infection prevalence between host species and pairwise Fisher's Exact tests for differences between host species
+# Tissue Comparisons
+## Comparison of prevalence between tissue types and distribution (i.e., brain only, pooled only, both)
+
+```{r}
+library(tidyr)
+All_VHSV_pooled<- All_VHSV %>% select(c(Species, `Titer-P`)) 
+All_VHSV_pooled$`Titer-P` %<>% as.numeric()
+All_VHSV_pooled<- All_VHSV_pooled %>% mutate(`Titer-P`=replace_na(`Titer-P`,0))
+All_VHSV_pooled$Tissue_diagnosis<- ifelse(All_VHSV_pooled$`Titer-P`== 0, "negative", "positive")
+All_VHSV_pooled$Tissue<- "pooled"
+names(All_VHSV_pooled)[2] <- "Titer"
+
+All_VHSV_brain<- All_VHSV %>% select(c(Species, `Titer-B`)) 
+All_VHSV_brain$`Titer-B` %<>% as.numeric()
+All_VHSV_brain<- All_VHSV_brain %>% mutate(`Titer-B`=replace_na(`Titer-B`,0))
+All_VHSV_brain$Tissue_diagnosis<- ifelse(All_VHSV_brain$`Titer-B`== 0, "negative", "positive")
+All_VHSV_brain$Tissue<- "brain"
+names(All_VHSV_brain)[2] <- "Titer"
+
+Tissue_diagnosis<- rbind(All_VHSV_pooled, All_VHSV_brain)
+```
+
+```{r}
+#percentages of all tested fish
+Totals<- as.data.frame(table(All_VHSV$Species))
+colnames(Totals) <- c("Species", "Total")
+
+Tissue_Summary<- as.data.frame(table(data=All_VHSV$Tissue, All_VHSV$Species))
+colnames(Tissue_Summary) <- c("Tissue", "Species", "Freq")
+
+Tissue_Summary<- merge(Tissue_Summary, Totals, by="Species")
+Tissue_Summary$Perc<- (Tissue_Summary$Freq / Tissue_Summary$Total)*100
+Tissue_Summary_1<- filter(Tissue_Summary, Tissue!="Negative")
+Tissue_Summary_1$Tissue <- ordered(Tissue_Summary_1$Tissue, levels=c("Brain", "Pooled Organ", "Both"))
+(Tissue_Plot_prevalence_All<- ggplot(Tissue_Summary_1, aes(x=Species, y=Perc, fill = Tissue)) + geom_col(position = "dodge", droplevels=FALSE, color = "black")+ theme(text = element_text(size = 12), legend.position = "bottom") + theme_classic() + scale_x_discrete(labels=c("Brown Bullhead" = "Brown Bullhead \n (n=232)", "Lepomis sp." = "Lepomis spp. \n (n=157)",  "Rock Bass" = "Rock Bass \n (n=311)", "Round Goby" =  "Round Goby \n (n=156)", "Yellow Perch" = "Yellow Perch \n (n=200)"))+ ylab("Percent (%) of all tested fish"))
+
+
+#percentages of VHSV-positive fish
+Totals<- as.data.frame(table(Positve_Hosts$Species))
+colnames(Totals) <- c("Species", "Total")
+
+Tissue_Summary<- as.data.frame(table(data=Positve_Hosts$Tissue, Positve_Hosts$Species))
+colnames(Tissue_Summary) <- c("Tissue", "Species", "Freq")
+
+Tissue_Summary<- merge(Tissue_Summary, Totals, by="Species")
+Tissue_Summary$Perc<- (Tissue_Summary$Freq / Tissue_Summary$Total)*100
+Tissue_Summary$Tissue <- ordered(Tissue_Summary$Tissue, levels=c("Brain", "Pooled Organ", "Both"))
+(Tissue_Plot_prevalence_Positives<- ggplot(Tissue_Summary, aes(x=Species, y=Perc, fill = Tissue)) + geom_col(position = "dodge", droplevels=FALSE, color = "black")+ ylim(0,100) + theme_classic() + theme(text = element_text(size = 12), legend.position = "bottom") + scale_x_discrete(labels=c("Brown Bullhead" = "Brown Bullhead \n (n=10)", "Lepomis sp." = "Lepomis spp. \n (n=22)",  "Rock Bass" = "Rock Bass \n (n=20)", "Round Goby" =  "Round Goby \n (n=82)", "Yellow Perch" = "Yellow Perch \n (n=34)"))+ ylab("Percent (%) of positive fish"))
+
+```
 
 ```{r}
 
-(Species_table<- table(All_VHSV$Species, All_VHSV$Diagnosis))
-names(dimnames(Species_table))<-c(  "Species", "Diagnosis")
-Species_table<-as.data.frame.matrix(Species_table)
+LEP<- Tissue_diagnosis %>% filter (Species=="Lepomis sp.")
+(Lep_table<- as.data.frame.matrix(table(LEP$Tissue, LEP$Tissue_diagnosis)))
+(Lep_test<-pairwise_fisher_test(Lep_table, conf.int = TRUE))
+chisq.test(Lep_table) #Not Significant
+
+RG<- Tissue_diagnosis %>% filter (Species=="Round Goby")
+(RG_table<- as.data.frame.matrix(table(RG$Tissue, RG$Tissue_diagnosis)))
+(RG_test<-pairwise_fisher_test(RG_table, conf.int = TRUE))
+chisq.test(RG_table) #Not Significant (P=0.05)
+
+YP<- Tissue_diagnosis %>% filter (Species=="Yellow Perch")
+(YP_table<-as.data.frame.matrix(table(YP$Tissue, YP$Tissue_diagnosis)))
+(YP_test<-pairwise_fisher_test(YP_table, conf.int = TRUE))
+chisq.test(YP_table) #Significant
+
+BBH<- Tissue_diagnosis %>% filter (Species=="Brown Bullhead")
+(BBH_table<- as.data.frame.matrix(table(BBH$Tissue, BBH$Tissue_diagnosis)))
+(BBH_test<-pairwise_fisher_test(BBH_table, conf.int = TRUE))
+chisq.test(BBH_table) #Significant
+
+RB<- Tissue_diagnosis %>% filter (Species=="Rock Bass")
+(RB_table<- as.data.frame.matrix(table(RB$Tissue, RB$Tissue_diagnosis)))
+(RB_test<-pairwise_fisher_test(RB_table, conf.int = TRUE))
+chisq.test(RB_table) #Not Signficant
+
+```
+
+# Comparison of titers between tissue types and distribution (i.e., brain only, pooled only, both)
+```{r}
+#All combined fish
+All_Host_Titers$Distribution<-ifelse(All_Host_Titers$Tissue=="Both", "Both", "Single")
+All_Host_Titers$Tissue <- ordered(All_Host_Titers$Tissue, levels=c("Brain", "Pooled Organ", "Both"))
+
+All_Host_Titers %>% filter(Isolate=="Brain") %>% kruskal.test(logTiter ~ Distribution, p.adjust.method = "bonferroni") #Significant
+All_Host_Titers %>% filter(Isolate=="Pooled") %>% kruskal.test(logTiter ~ Distribution, p.adjust.method = "bonferroni") #Significant
+```
+### Lepomis spp.
+```{r}
+LEP_titers<- All_Host_Titers %>% filter(Species=="Lepomis sp.")
+LEP_titers$Isolate %<>% as.factor()
+LEP_titers$logTiter %<>% as.numeric()
+
+#Median test brain vs. pooled
+wilcox.test(logTiter ~ Isolate, data = LEP_titers, exact = FALSE)
+kruskal.test(logTiter~Isolate, data = LEP_titers) #Not Signifcant
+
+#Median test both vs. single
+wilcox.test(logTiter ~ Distribution, data = LEP_titers, exact = FALSE)
+kruskal.test(logTiter~Distribution, data = LEP_titers) #Significant
+
+#Plot
+(Tissue_Plot_Titers<- ggplot(LEP_titers, aes(x=Distribution, y=logTiter, fill=Isolate)) + geom_boxplot() +
+  ylab("log10(Titer) (N-gene \n copies per 50 ng RNA)") + scale_x_discrete(labels=c("Brown Bullhead" = "Brown Bullhead \n (n=10)", "Lepomis sp." = "Lepomis spp. \n (n=22)",  "Rock Bass" = "Rock Bass \n (n=20)", "Round Goby" =  "Round Goby \n (n=82)", "Yellow Perch" = "Yellow Perch \n (n=34)"))+ theme(text = element_text(size = 12), legend.position = "bottom"))
+```
+
+### Round Goby
+```{r}
+RG_titers<- All_Host_Titers %>% filter(Species=="Round Goby")
+RG_titers$Isolate %<>% as.factor()
+RG_titers$logTiter %<>% as.numeric()
+
+#Median test brain vs. pooled
+wilcox.test(logTiter ~ Isolate, data = RG_titers, exact = FALSE)
+kruskal.test(logTiter~Isolate, data = RG_titers) #Not Significant
+
+#Median test both vs. single
+wilcox.test(logTiter ~ Distribution, data = RG_titers, exact = FALSE)
+kruskal.test(logTiter~Distribution, data = RG_titers) #Significant
+
+#Plot
+(Tissue_Plot_Titers<- ggplot(RG_titers, aes(x=Distribution, y=logTiter, fill=Isolate)) + geom_boxplot() +
+  ylab("log10(Titer) (N-gene \n copies per 50 ng RNA)") + scale_x_discrete(labels=c("Brown Bullhead" = "Brown Bullhead \n (n=10)", "Lepomis sp." = "Lepomis spp. \n (n=22)",  "Rock Bass" = "Rock Bass \n (n=20)", "Round Goby" =  "Round Goby \n (n=82)", "Yellow Perch" = "Yellow Perch \n (n=34)"))+ theme(text = element_text(size = 12), legend.position = "bottom"))
+```
+
+### Brown Bullhead
+```{r}
+BBH_titers<- All_Host_Titers %>% filter(Species=="Brown Bullhead")
+BBH_titers$Isolate %<>% as.factor()
+BBH_titers$logTiter %<>% as.numeric()
+
+#Median test brain vs. pooled
+wilcox.test(logTiter ~ Isolate, data = BBH_titers, exact = FALSE)
+kruskal.test(logTiter~Isolate, data = BBH_titers) #Not Significant
+
+#Median test both vs. single- Can't test, no fish had VHSV in both tissues
+#wilcox.test(logTiter ~ Distribution, data = BBH_titers, exact = FALSE)
+#kruskal.test(logTiter~Distribution, data = BBH_titers)
+
+#Plot
+(Tissue_Plot_Titers<- ggplot(BBH_titers, aes(x=Distribution, y=logTiter, fill=Isolate)) + geom_boxplot() +
+  ylab("log10(Titer) (N-gene \n copies per 50 ng RNA)") + scale_x_discrete(labels=c("Brown Bullhead" = "Brown Bullhead \n (n=10)", "Lepomis sp." = "Lepomis spp. \n (n=22)",  "Rock Bass" = "Rock Bass \n (n=20)", "Round Goby" =  "Round Goby \n (n=82)", "Yellow Perch" = "Yellow Perch \n (n=34)"))+ theme(text = element_text(size = 12), legend.position = "bottom"))
+```
+
+### Yellow Perch
+``` {r}
+YP_titers<- All_Host_Titers %>% filter(Species=="Yellow Perch")
+YP_titers$Isolate %<>% as.factor()
+YP_titers$logTiter %<>% as.numeric()
+
+#Median test brain vs. pooled
+wilcox.test(logTiter ~ Isolate, data = YP_titers, exact = FALSE)
+kruskal.test(logTiter~Isolate, data = YP_titers) #Not Significant
+
+#Median test both vs. single
+wilcox.test(logTiter ~ Distribution, data = YP_titers, exact = FALSE)
+kruskal.test(logTiter~Distribution, data = YP_titers) #Not Significant
+
+#Plot
+(Tissue_Plot_Titers<- ggplot(YP_titers, aes(x=Distribution, y=logTiter, fill=Isolate)) + geom_boxplot() +
+  ylab("log10(Titer) (N-gene \n copies per 50 ng RNA)") + scale_x_discrete(labels=c("Brown Bullhead" = "Brown Bullhead \n (n=10)", "Lepomis sp." = "Lepomis spp. \n (n=22)",  "Rock Bass" = "Rock Bass \n (n=20)", "Round Goby" =  "Round Goby \n (n=82)", "Yellow Perch" = "Yellow Perch \n (n=34)"))+ theme(text = element_text(size = 12), legend.position = "bottom"))
+```
+
+### Rock Bass
+```{r}
+RB_titers<- All_Host_Titers %>% filter(Species=="Rock Bass")
+RB_titers$Isolate %<>% as.factor()
+RB_titers$logTiter %<>% as.numeric()
+
+#Median test brain vs. pooled
+wilcox.test(logTiter ~ Isolate, data = RB_titers, exact = FALSE)
+kruskal.test(logTiter~Isolate, data = RB_titers) #Not Significant
+
+#Median test both vs. single
+wilcox.test(logTiter ~ Distribution, data = RB_titers, exact = FALSE)
+kruskal.test(logTiter~Distribution, data = RB_titers) #Not Significant
+
+(Tissue_Plot_Titers<- ggplot(RB_titers, aes(x=Distribution, y=logTiter, fill=Isolate)) + geom_boxplot() +
+  ylab("log10(Titer) (N-gene \n copies per 50 ng RNA)") + scale_x_discrete(labels=c("Brown Bullhead" = "Brown Bullhead \n (n=10)", "Lepomis sp." = "Lepomis spp. \n (n=22)",  "Rock Bass" = "Rock Bass \n (n=20)", "Round Goby" =  "Round Goby \n (n=82)", "Yellow Perch" = "Yellow Perch \n (n=34)"))+ theme(text = element_text(size = 12), legend.position = "bottom"))
+```
+
+
+```{r}
+#Combined all species in one plot
+(Tissue_Plot_Titers<- ggplot(All_Host_Titers, aes(x=Distribution, y=logTiter, fill=Isolate)) + geom_boxplot() + facet_wrap(~Species) +
+  ylab("log10(Titer) (N-gene \n copies per 50 ng RNA)") + scale_x_discrete(labels=c("Brown Bullhead" = "Brown Bullhead \n (n=10)", "Lepomis sp." = "Lepomis spp. \n (n=22)",  "Rock Bass" = "Rock Bass \n (n=20)", "Round Goby" =  "Round Goby \n (n=82)", "Yellow Perch" = "Yellow Perch \n (n=34)"))+ theme(text = element_text(size = 14), legend.position = "bottom")+ theme_classic() + theme(text = element_text(size = 12), legend.position = "bottom") )
+
+
+wilcox.test(logTiter ~ Isolate, data = All_Host_Titers, exact = FALSE) #Not Significant
+wilcox.test(logTiter ~ Distribution, data = All_Host_Titers, exact = FALSE) #Not Significant
+
+table(All_Host_Titers$Distribution)
+kruskal.test(logTiter~Distribution, data = All_Host_Titers)
+
+(Tissue_Plot_Titers<- ggplot(All_Host_Titers, aes(x=Distribution, y=logTiter, fill=Isolate)) + geom_boxplot() + ylim(0,8)  +
+  ylab("log10(Titer) (N-gene \n copies per 50 ng RNA)") + scale_x_discrete(labels=c("Both" = "Both \n (n=142)", "Single" = "Single \n  (n=96)"))+ theme(text = element_text(size = 14), legend.position = "bottom")+ theme_classic() + theme(text = element_text(size = 12), legend.position = "bottom") + scale_fill_manual(values=c("grey", "white")) + theme_classic()+ theme(text= element_text(size = 20, color="black", face="plain"), legend.position = "bottom"))
+
+ggsave("Tissue_Plot_Titers.jpeg", device="jpeg", plot=Tissue_Plot_Titers, path="C:/Users/ah2355/Documents/RGCompetence_JFishDiseases/Figures", dpi="retina", width = 12, height = 9)
+
+```
+
+
+# Contingency table for infection prevalence and pairwise Fisher's Exact tests for differences between host species
+
+```{r}
+
+#Difference between Lepomis species
+
+Lepomis<- All_VHSV %>% filter (Species=="Lepomis sp.")
+Lepomis$LEP_sp %<>% as.factor()
+(Lep_table<- as.data.frame.matrix(table(Lepomis$`LEP_sp`, Lepomis$Diagnosis)))
+names(dimnames(Lep_table))<-c("Species", "Diagnosis")
+
+pairwise_fisher_test(Lep_table, conf.int = TRUE, alternative = "two.sided", p.adjust.method = "bonferroni")
+chisq.test(Lep_table) #not significantly different prevalence detected
+```
+### Pairwise fisher test
+
+```{r}
+(Species_table<- as.data.frame.matrix(table(All_VHSV$Species, All_VHSV$Diagnosis)))
+names(dimnames(Species_table))<-c("Species", "Diagnosis")
 
 (Species_test<-pairwise_fisher_test(Species_table, conf.int = TRUE, alternative = "two.sided", p.adjust.method = "bonferroni"))
 Species_test$p<- round(Species_test$p, digits = 2)
@@ -68,13 +284,108 @@ names(Species_test)[names(Species_test)=='p.adj.signif']<- 'p.adj.sig'
     locations = cells_column_labels())%>%
   cols_width(everything() ~ px(100)))
 
-Species_prevalence_test_table %>% gtsave(filename="Species_prevalence_FisherTest.png", path="G:/Dissertation/Chapter 3- VHSV species/USLR_VHSV_Species/Figures")
+#Species_prevalence_test_table %>% gtsave(filename="Species_prevalence_FisherTest.png", path="G:/Dissertation/Chapter 3- VHSV species/USLR_VHSV_Species/Figures")
+
+```
+
+# Summary table of prevalence across species
+
+```{r, echo=FALSE}
+Species_table$Total<-rowSums(Species_table)
+Species_table$Prevalence<- (Species_table$Positive/Species_table$Total)
+Species_table$Species<- row.names(Species_table)
+
+Species_table$Prevalence<- round(Species_table$Prevalence, digits = 4)
+
+(CI<- binom.cloglog(Species_table$Positive, Species_table$Total, conf.level = 0.95))
+CI_Prev<- round ((CI[,5:6]), 4)
+Species_table %<>% cbind(CI_Prev)
+
+(Print_Host_table<- Species_table %>% gt(rowname_col = "Species") %>%
+  tab_stubhead(label = "Species") %>%  cols_move_to_start(columns = "Positive") %>% fmt_percent(columns =  c("Prevalence", "lower", "upper")) %>%  cols_merge(
+    columns = c("Prevalence", "lower", "upper"),
+    pattern = "{1}<< ({2}, {3})>>") %>%
+  cols_label(
+    Prevalence = html("Prevalence % (95% CI)") ))
+
+Print_Host_table %>% gtsave(filename="Species_prevalence_summary.docx", path="C:/Users/ah2355/Documents/RGCompetence_JFishDiseases/Figures")
+```
+
+## Calculate 95% CI
+```{r}
+library(binom)
+(LEP_table_1<- as.data.frame.matrix(table(LEP$Tissue, LEP$Tissue_diagnosis)))
+LEP_table_1$Species<- "Lepomis sp."
+LEP_table_1$tissue<- rownames(LEP_table_1)
+
+(RG_table_1<- as.data.frame.matrix(table(RG$Tissue, RG$Tissue_diagnosis)))
+RG_table_1$Species<- "Round Goby"
+RG_table_1$tissue<- rownames(RG_table_1)
+
+(YP_table_1<- as.data.frame.matrix(table(YP$Tissue, YP$Tissue_diagnosis)))
+YP_table_1$Species<- "Yellow Perch"
+YP_table_1$tissue<- rownames(YP_table_1)
+
+(RB_table_1<- as.data.frame.matrix(table(RB$Tissue, RB$Tissue_diagnosis)))
+RB_table_1$Species<- "Rock Bass"
+RB_table_1$tissue<- rownames(RB_table_1)
+
+(BBH_table_1<- as.data.frame.matrix(table(BBH$Tissue, BBH$Tissue_diagnosis)))
+BBH_table_1$Species<- "Brown Bullhead"
+BBH_table_1$tissue<- rownames(BBH_table_1)
+
+(Species_table_1<- rbind(LEP_table_1, RG_table_1, YP_table_1, RB_table_1, BBH_table_1))
+Species_table_1$Total<- Species_table_1$negative + Species_table_1$positive
+Species_table_1$Prevalence<- (Species_table_1$positive / Species_table_1$Total)*100
+
+(CI<- binom.cloglog(Species_table_1$positive, Species_table_1$Total, conf.level = 0.95))
+CI_Prev<- CI[,5:6] *100
+Species_table_1 %<>% cbind(CI_Prev)
+
+(Host_prev<- ggplot(data=Species_table_1) + geom_col(aes(x=Species, y=Prevalence, fill=tissue), position = "dodge", color="black", stat="identity") + ylim(0,100)+ theme_classic () + labs(x = "Species",  y = "Prevalence (%)")  + theme(text= element_text(size = 20, color="black", face = "plain"), legend.position = "bottom") + scale_x_discrete(labels=c("Brown Bullhead" = "Brown Bullhead \n (n=232)", "Lepomis sp." = "Lepomis spp. \n (n=157)",  "Rock Bass" = "Rock Bass \n (n=311)", "Round Goby" =  "Round Goby \n (n=156)", "Yellow Perch" = "Yellow Perch \n (n=200)")) + geom_errorbar(aes(Species, ymin = lower, ymax = upper, group=tissue), width = 0.2, position = position_dodge(0.9)) + labs(fill="Tissue") + scale_fill_manual(values=c("grey", "white"), labels=c("Brain", "Pooled")))
+
+(Host_prev<- Host_prev +  stat_pvalue_manual(Species_test, xmin="group1", xmax = "group2", step.increase = 0.15, y.position = 50, label="p.adj.sig", hide.ns = TRUE, label.size = 7, bracket.size =  0.5))
+
+ggsave("Host_prev.jpeg", device="jpeg", plot=Host_prev, path="C:/Users/ah2355/Documents/RGCompetence_JFishDiseases/Figures", dpi="retina", width = 12, height = 9)
+
+```
+
+### Prevalence barplots between host species
+
+```{r}
+
+
+(Host_prev<- ggplot(data=Species_table) + geom_col(aes(x=Species, y=Prevalence), fill="gray80", color="black", stat="identity") + ylim(0,100)+ theme_classic () + labs(x = NULL,  y = "Prevalence (%)")  + theme(text= element_text(size = 14)) + scale_x_discrete(labels=c("Brown Bullhead" = "Brown Bullhead \n (n=232)", "Lepomis sp." = "Lepomis spp. \n (n=157)",  "Rock Bass" = "Rock Bass \n (n=311)", "Round Goby" =  "Round Goby \n (n=156)", "Yellow Perch" = "Yellow Perch \n (n=200)")) + geom_errorbar(aes(Species, ymin = lower, ymax = upper), width = 0.2))
+
+(Host_prev<- Host_prev +  stat_pvalue_manual(Species_test, xmin="group1", xmax = "group2", step.increase = 0.1, y.position = 60, label="p.adj.sig", hide.ns = TRUE, label.size = 8, bracket.size =  0.5))
+
+
+#ggsave("Host_prevalence.jpeg", device="jpeg", plot=Host_prev, path="G:/Dissertation/Chapter 3- VHSV species/USLR_VHSV_Species/Figures", dpi="retina", width = 14, height = 9)
 
 ```
 
 
-### 2. Pairwise median titer- Kruskal-Wallis test with Dunn post-hoc comparisons with Bonferroni correction between host species
+# Pairwise median titer- Kruskal-Wallis test with Dunn post-hoc comparisons with Bonferroni correction between host species
+
 ```{r, echo=FALSE}
+
+#Test difference between lepomis species
+
+Lepomis_titers<- All_Host_Titers %>% filter(Species=="Lepomis sp.")
+Lepomis_titers$LEP_sp %<>% as.factor()
+Lepomis_titers$logTiter %<>% as.numeric()
+
+wilcox.test(logTiter ~ LEP_sp, data = Lepomis_titers, exact = TRUE)
+kruskal.test(logTiter~LEP_sp, data = LEP_titers) #Significantly different median titer value between Lepomis species
+
+ggplot(data=Lepomis_titers) + geom_boxplot(aes(LEP_sp, logTiter, fill=Isolate)) + ylim(0,8)  + labs( y="log10(Titer) (N-gene \n copies per 50 ng RNA)")  + scale_fill_manual(values=c("grey", "white")) + theme_classic()+ theme(axis.text= element_text(size = 14), legend.text = element_text(size = 14), axis.title = element_text(size = 18), title=element_text(size=22), legend.position = "bottom", legend.title = element_text(size = 14))  
+
+```
+
+
+
+
+```{r}
 (All_Host_Titers %>% kruskal.test(logTiter ~ Species, p.adjust.method = "bonferroni"))
 Host_Titers_test<- All_Host_Titers %>% dunn_test (logTiter~Species, p.adjust.method = "bonferroni")
 
@@ -93,57 +404,16 @@ locations = cells_row_groups(groups = everything())
     locations = cells_column_labels())%>%
   cols_width(everything() ~ px(65)))
 
-Species_titer_test_table %>% gtsave(filename="Species_titer_DunnTest.png", path="G:/Dissertation/Chapter 3- VHSV species/USLR_VHSV_Species/Figures")
+#Species_titer_test_table %>% gtsave(filename="Species_titer_DunnTest.png", path="G:/Dissertation/Chapter 3- VHSV species/USLR_VHSV_Species/Figures")
 ```
-
-## 3. Figures & Tables
-
-### Summary of prevalence rates
-
-```{r, echo=FALSE}
-Species_table$Total<-rowSums(Species_table)
-Species_table$Prevalence<- (Species_table$Positive/Species_table$Total)*100
-Species_table$Species<- row.names(Species_table)
-
-Species_table$Prevalence<- round(Species_table$Prevalence, digits = 2)
-
-(Print_Host_table<- Species_table %>% gt(rowname_col = "Species") %>%
-  tab_stubhead(label = "Species") %>%  cols_move_to_start(columns = "Positive"))
-
-Print_Host_table %>% gtsave(filename="Species_prevalence_summary.png", path="G:/Dissertation/Chapter 3- VHSV species/USLR_VHSV_Species/Figures")
-```
-
-### Prevalence barplots between host species
-
-```{r}
-
-Host_prev<- ggplot(data=Species_table) + geom_col(aes(Species, Prevalence)) + ylim(0,100)+ theme_classic () + labs(x = NULL,  y = "Prevalence (%)")  + theme(axis.text = element_text(size = 14), axis.title = element_text(size = 18), title=element_text(size=22)) + scale_x_discrete(labels=c("Brown Bullhead" = "Brown Bullhead \n (n=232)", "Lepomis sp." = "Lepomis sp. \n (n=157)",  "Rock Bass" = "Rock Bass \n (n=311)", "Round Goby" =  "Round Goby \n (n=156)", "Yellow Perch" = "Yellow Perch \n (n=200)"))
-
-(Host_prev<- Host_prev +  stat_pvalue_manual(Species_test, xmin="group1", xmax = "group2", step.increase = 0.1, y.position = 60, label="p.adj.sig", hide.ns = TRUE, label.size = 8, bracket.size =  0.7))
-
-
-ggsave("Host_prevalence.jpeg", device="jpeg", plot=Host_prev, path="G:/Dissertation/Chapter 3- VHSV species/USLR_VHSV_Species/Figures", dpi="retina", width = 14, height = 9)
-
-```
-
 
 ### Titer boxplots between host species
 
 ```{r, echo=FALSE}
-Host_titer<-ggplot(data=All_Host_Titers) + geom_boxplot(aes(Species, logTiter, fill=Isolate)) + ylim(0,8)  + labs( y="log10(Titer) (N-gene \n copies per 50 ng RNA)")  + scale_fill_manual(values=c("grey", "white")) + theme_classic()+ theme(axis.text= element_text(size = 14), legend.text = element_text(size = 14), axis.title = element_text(size = 18), title=element_text(size=22), legend.position = "bottom", legend.title = element_text(size = 14))  
+Host_titer<-ggplot(data=All_Host_Titers) + geom_boxplot(aes(Species, logTiter, fill=Isolate)) + ylim(0,8)  + labs( y="log10(Titer) (N-gene \n copies per 50 ng RNA)")  + scale_fill_manual(values=c("grey", "white")) + theme_classic()+ theme(text= element_text(size = 20, color="black", face="plain"), legend.position = "bottom")+ scale_x_discrete(labels=c("Brown Bullhead" = "Brown Bullhead \n (n=232)", "Lepomis sp." = "Lepomis spp. \n (n=157)",  "Rock Bass" = "Rock Bass \n (n=311)", "Round Goby" =  "Round Goby \n (n=156)", "Yellow Perch" = "Yellow Perch \n (n=200)"))   
 
-(Host_titer<- Host_titer +  stat_pvalue_manual(Host_Titers_test, xmin="group1", xmax = "group2", step.increase = 0.1, y.position = 5.0, label="p.adj.sig", hide.ns = TRUE, label.size = 8, bracket.size =  0.7))
+(Host_titer<- Host_titer +  stat_pvalue_manual(Host_Titers_test, xmin="group1", xmax = "group2", step.increase = 0.075, y.position = 6, label="p.adj.sig", hide.ns = TRUE, label.size = 7, bracket.size =  0.5))
 
-ggsave("Host_titer.jpeg", device="jpeg", plot=Host_titer, path="G:/Dissertation/Chapter 3- VHSV species/USLR_VHSV_Species/Figures", dpi="retina", width = 14, height = 9)
+ggsave("Host_titer.jpeg", device="jpeg", plot=Host_titer, path="C:/Users/ah2355/Documents/RGCompetence_JFishDiseases/Figures", dpi="retina", width = 12, height = 9)
 ```
-
-
-### Join plots 
-
-```{r}
-(VHSV_Species<- ggarrange(Host_prev, Host_titer, nrow = 2))
- ggsave("JOINED_VHSV_Species.jpeg", device="jpeg", plot=VHSV_Species, path="G:/Dissertation/Chapter 3- VHSV species/USLR_VHSV_Species/Figures", dpi="retina", width = 10, height = 14)
- 
-```
-
 

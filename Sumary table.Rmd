@@ -1,0 +1,162 @@
+---
+title: "VHSV Summary table"
+author: "Anna Conklyn"
+date: "2023-06-02"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+##Install packages
+
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+library(magrittr)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(broom)
+library(stargazer)
+library(plyr)
+library(gt)
+library(gtsummary)
+library(lubridate)
+library(qwraps2)
+library(gtExtras)
+library(readxl)
+```
+
+
+```{r, include=FALSE}
+##Setup and data partitioning 
+
+getwd()
+setwd("G:/Dissertation/Chapter 3- VHSV species/USLR_VHSV_Species")
+VHSVCollection<-read_xlsx("CollectionSummary.xlsx") 
+VHSVCollection<- VHSVCollection[-c(13:14) ]
+VHSVCollection$`Avg daily temp` %<>% as.numeric()  %>% round(2)
+VHSVCollection$`RG CPUE` %<>% as.numeric()  %>% round(2)
+```
+
+
+
+
+```{r}
+(VHSV_Table<- gt(VHSVCollection, groupname_col = c('Location', 'Bay'), auto_align = TRUE) %>%  
+              sub_missing(columns = everything(), missing_text = "") %>%
+  cols_label(
+    "Collection Dates" = html("Collection<br> Dates"),
+    "Avg daily temp" = html("Average daily<br>temperature (&deg;C)"),
+    RG = html("Round<br>goby"),
+    YP = html("Yellow<br>perch"),
+    BBH = html("Brown<br>bullhead"),
+    LEP = html("Lepomis<br>sunfish"),
+    RB = html("Rock<br>bass")) %>% 
+  tab_options(row_group.as_column = FALSE) %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+locations = cells_row_groups(groups = everything())) %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels()) %>% 
+   tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_body(columns="RG", rows = c(1,2,3,4,5,7,8,9,10,17,18,19,20,26,28,30 ))) %>%
+   tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_body(columns="YP", rows = c(3,9, 15)))%>%
+   tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_body(columns="LEP", rows = c(4, 9, 25))) )
+
+
+VHSV_Table %>% gtsave(filename="VHSV_Summary_Table.png", path="G:/Dissertation/Chapter 3- VHSV species/USLR_VHSV_Species/Figures")
+
+```
+## Break into two tables
+```{r}
+VHSVCollection_Cape<- filter(VHSVCollection, Location == "Cape Vincent")
+VHSVCollection_Grindstone<- filter(VHSVCollection, Location == "Grindstone Island")
+
+
+VHSVCollection_Up<- rbind(VHSVCollection_Cape, VHSVCollection_Grindstone)
+(VHSV_Table_Up<- gt(VHSVCollection_Up, groupname_col = c('Location', 'Bay'), auto_align = TRUE) %>%  
+              sub_missing(columns = everything(), missing_text = "") %>%
+  cols_label(
+    "Collection Dates" = html("Collection<br> Dates"),
+    "Avg daily temp" = html("Average daily<br>temperature (&deg;C)"),
+    RG = html("Round<br>goby"),
+    YP = html("Yellow<br>perch"),
+    BBH = html("Brown<br>bullhead"),
+    LEP = html("Lepomis<br>sunfish"),
+    RB = html("Rock<br>bass")) %>% 
+  tab_options(row_group.as_column = FALSE) %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+locations = cells_row_groups(groups = everything())) %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels()) %>% 
+   tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_body(columns="RG", rows = c(1,2,3,4,5,7,8,9,10))) %>%
+   tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_body(columns="YP", rows = c(3,9, 15)))%>%
+   tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_body(columns="LEP", rows = c(4, 9))))
+
+VHSV_Table_Up %>% gtsave(filename="VHSV_Summary_Table_1.png", path="G:/Dissertation/Chapter 3- VHSV species/USLR_VHSV_Species/Figures")
+
+
+
+
+VHSVCollection_Clayton<- filter(VHSVCollection, Location == "Clayton")
+VHSVCollection_ABay<- filter(VHSVCollection, Location == "Alexandria Bay")
+VHSVCollection_Down<- rbind(VHSVCollection_Clayton, VHSVCollection_ABay)
+
+(VHSV_Table_Down<- gt(VHSVCollection_Down, groupname_col = c('Location', 'Bay'), auto_align = TRUE) %>%  
+              sub_missing(columns = everything(), missing_text = "") %>%
+  cols_label(
+    "Collection Dates" = html("Collection<br> Dates"),
+    "Avg daily temp" = html("Average daily<br>temperature (&deg;C)"),
+    RG = html("Round<br>goby"),
+    YP = html("Yellow<br>perch"),
+    BBH = html("Brown<br>bullhead"),
+    LEP = html("Lepomis<br>sunfish"),
+    RB = html("Rock<br>bass")) %>% 
+  tab_options(row_group.as_column = FALSE) %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+locations = cells_row_groups(groups = everything())) %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels())%>% 
+   tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_body(columns="RG", rows = c(1,2,3,4, 5, 11, 13, 15))) %>%
+   tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_body(columns="LEP", rows = c(10))) )
+
+VHSV_Table_Down %>% gtsave(filename="VHSV_Summary_Table_2.png", path="G:/Dissertation/Chapter 3- VHSV species/USLR_VHSV_Species/Figures")
+
+```
+
+
+
+
+```{r}
+VHSVCollection_1<-read_xlsx("C:/Users/ah2355/Documents/GitHub/USLR_VHSV_Species/CollectionSummary_1.xlsx") 
+
+(VHSV_Table<- gt(VHSVCollection_1, groupname_col = 'Location', rowname_col = 'Bay') %>%  
+              sub_missing(columns = everything(), missing_text = "") %>%
+  cols_width( "Collection Dates" ~ px(85), Bay~px(50), everything() ~ px(25))  %>% cols_align(align = 'center', columns = everything()) %>% tab_options(table.font.size = px(10) )) 
+
+
+VHSV_Table %>% gtsave(filename="VHSV_Species.docx", path="C:/Users/ah2355/Documents/GitHub/USLR_VHSV_Species/Figures" )
+
+```
+
